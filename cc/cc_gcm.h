@@ -142,4 +142,73 @@ void ccmode_gcm_encrypt(ccgcm_ctx *ctx, size_t nbytes, const void *in,
 void ccmode_gcm_finalize(ccgcm_ctx *key, size_t tag_size, void *tag);
 void ccmode_gcm_reset(ccgcm_ctx *key);
 
+/* GCM mode. */
+
+/* Declare a gcm key named _name_.  Pass the size field of a struct ccmode_gcm
+ for _size_. */
+#define ccgcm_ctx_decl(_size_, _name_) cc_ctx_decl(ccgcm_ctx, _size_, _name_)
+#define ccgcm_ctx_clear(_size_, _name_) cc_clear(_size_, _name_)
+
+CC_INLINE size_t ccgcm_context_size(const struct ccmode_gcm *mode)
+{
+    return mode->size;
+}
+
+CC_INLINE unsigned long ccgcm_block_size(const struct ccmode_gcm *mode)
+{
+	return mode->block_size;
+}
+
+CC_INLINE void ccgcm_init(const struct ccmode_gcm *mode, ccgcm_ctx *ctx,
+                          size_t key_len, const void *key)
+{
+    mode->init(mode, ctx, key_len, key);
+}
+
+CC_INLINE void ccgcm_set_iv(const struct ccmode_gcm *mode, ccgcm_ctx *ctx,
+                            size_t iv_size, const void *iv)
+{
+	mode->set_iv(ctx, iv_size, iv);
+}
+
+CC_INLINE void ccgcm_gmac(const struct ccmode_gcm *mode, ccgcm_ctx *ctx,
+                          size_t nbytes, const void *in)
+{
+	mode->gmac(ctx, nbytes, in);
+}
+
+CC_INLINE void ccgcm_update(const struct ccmode_gcm *mode, ccgcm_ctx *ctx,
+                            size_t nbytes, const void *in, void *out)
+{
+	mode->gcm(ctx, nbytes, in, out);
+}
+
+CC_INLINE void ccgcm_finalize(const struct ccmode_gcm *mode, ccgcm_ctx *ctx,
+                              size_t tag_size, void *tag)
+{
+	mode->finalize(ctx, tag_size, tag);
+}
+
+CC_INLINE void ccgcm_reset(const struct ccmode_gcm *mode, ccgcm_ctx *ctx)
+{
+    mode->reset(ctx);
+}
+
+
+CC_INLINE void ccgcm_one_shot(const struct ccmode_gcm *mode,
+                              size_t key_len, const void *key,
+                              size_t iv_len, const void *iv,
+                              size_t adata_len, const void *adata,
+                              size_t nbytes, const void *in, void *out,
+                              size_t tag_len, void *tag)
+{
+	ccgcm_ctx_decl(mode->size, ctx);
+	mode->init(mode, ctx, key_len, key);
+	mode->set_iv(ctx, iv_len, iv);
+	mode->gmac(ctx, adata_len, adata);
+	mode->gcm(ctx, nbytes, in, out);
+	mode->finalize(ctx, tag_len, tag);
+	ccgcm_ctx_clear(mode->size, ctx);
+}
+
 #endif

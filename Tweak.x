@@ -20,15 +20,13 @@
  */
 
 #include "minimal.h"
+#include "ssl_hooks.h"
 
 /* Minimal Cydia Substrate header */
 typedef const void *MSImageRef;
 MSImageRef MSGetImageByName(const char *file);
 void *MSFindSymbol(MSImageRef image, const char *name);
 void MSHookFunction(void *symbol, void *replace, void **result);
-
-extern const SSLSymmetricCipher SSLCipherAES_128_GCM;
-extern const SSLSymmetricCipher SSLCipherAES_256_GCM;
 
 #define LIBRARY_PATH "/System/Library/Frameworks/Security.framework/Security"
 #define LOAD_SYMBOL(name) do { \
@@ -52,29 +50,32 @@ void PatchKnownCipherSuites(MSImageRef image) {
     array[10] = TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384; //TLS_ECDHE_RSA_WITH_RC4_128_SHA
 }
 
-//extern "C" {
-    void (*_InitCipherSpec)(struct SSLRecordInternalContext *ctx, uint16_t selectedCipher);
-    void (*old_InitCipherSpec)(struct SSLRecordInternalContext *ctx, uint16_t selectedCipher);
+void (*orig_InitCipherSpec)(struct SSLRecordInternalContext *ctx, uint16_t selectedCipher);
+OSStatus (*orig_SSLInitPendingCiphers)(SSLContext *ctx);
+int (*orig_ssl3WriteRecord)(SSLRecord rec, struct SSLRecordInternalContext *ctx);
+int (*orig_tls1DecryptRecord)(
+	uint8_t type,
+	SSLBuffer *payload,
+	struct SSLRecordInternalContext *ctx);
 
-    void custom_InitCipherSpec(struct SSLRecordInternalContext *ctx, uint16_t selectedCipher) {
-        old_InitCipherSpec(ctx, selectedCipher); // dirty hack to get macAlgorithm correct lol
+int (*_sslRand)(SSLBuffer *buf);
 
-        if (selectedCipher == TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 || selectedCipher == TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384) {
-            SSLRecordCipherSpec *dst = &ctx->selectedCipherSpec;
-            ctx->selectedCipher = selectedCipher;
+typedef	unsigned int aes_32t;
+typedef struct
+{   aes_32t ks[60];
+    aes_32t rn;
+} ccaes_arm_encrypt_ctx;
 
-            if (selectedCipher == TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384)
-                dst->cipher = &SSLCipherAES_256_GCM;
-            else 
-                dst->cipher = &SSLCipherAES_128_GCM;
-        }
-        return;
-    }
-//}
+int (*_ccaes_arm_encrypt)(const unsigned char *in, unsigned char *out, const ccaes_arm_encrypt_ctx cx[1]);
+const void *(*_ccaes_ecb_encrypt_mode)(void);
 
 %ctor {
     MSImageRef image = NULL;
+
     void *_SSLProcessServerKeyExchange = NULL;
+    void *_InitCipherSpec = NULL;
+    void *_ssl3WriteRecord = NULL;
+    void *_tls1DecryptRecord = NULL;
 
     image = MSGetImageByName(LIBRARY_PATH);
     if (image == NULL) {
@@ -84,6 +85,9 @@ void PatchKnownCipherSuites(MSImageRef image) {
 
     LOAD_SYMBOL(SSLProcessServerKeyExchange);
     LOAD_SYMBOL(InitCipherSpec);
+    LOAD_SYMBOL(SSLInitPendingCiphers);
+    LOAD_SYMBOL(ssl3WriteRecord);
+    LOAD_SYMBOL(tls1DecryptRecord);
     LOAD_SYMBOL(CSSMOID_SHA1WithRSA);
     LOAD_SYMBOL(CSSMOID_SHA256WithRSA);
     LOAD_SYMBOL(CSSMOID_SHA384WithRSA);
@@ -94,17 +98,26 @@ void PatchKnownCipherSuites(MSImageRef image) {
     LOAD_SYMBOL(SSLAllocBuffer);
     LOAD_SYMBOL(SSLFreeBuffer);
     LOAD_SYMBOL(SSLDecodeInt);
+    LOAD_SYMBOL(SSLEncodeInt);
     LOAD_SYMBOL(sslFreePubKey);
     LOAD_SYMBOL(sslGetPubKeyFromBits);
     LOAD_SYMBOL(ReadyHash);
     LOAD_SYMBOL(SSLDecodeDHKeyParams);
     LOAD_SYMBOL(sslRsaVerify);
     LOAD_SYMBOL(sslRawVerify);
-    LOAD_SYMBOL(CCSymmInit);
-    LOAD_SYMBOL(CCSymmFinish);
+
+    LOAD_SYMBOL(ccaes_arm_encrypt);
+    LOAD_SYMBOL(ccaes_ecb_encrypt_mode);
+    LOAD_SYMBOL(SSLDecodeUInt64);
+    LOAD_SYMBOL(SSLEncodeUInt64);
+    LOAD_SYMBOL(_sslRand);
+    LOAD_SYMBOL(ccDRBGGetRngState);
 
     PatchKnownCipherSuites(image);
 
     MSHookFunction(_SSLProcessServerKeyExchange, custom_SSLProcessServerKeyExchange, NULL);
-    MSHookFunction(_InitCipherSpec, custom_InitCipherSpec, (void **)&old_InitCipherSpec);
+    MSHookFunction(_InitCipherSpec, custom_InitCipherSpec, (void **)&orig_InitCipherSpec);
+    MSHookFunction(_SSLInitPendingCiphers, custom_SSLInitPendingCiphers, (void **)&orig_SSLInitPendingCiphers);
+    MSHookFunction(_ssl3WriteRecord, custom_ssl3WriteRecord, (void **)&orig_ssl3WriteRecord);
+    MSHookFunction(_tls1DecryptRecord, custom_tls1DecryptRecord, (void **)&orig_tls1DecryptRecord);
 }

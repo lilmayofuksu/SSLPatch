@@ -13,6 +13,11 @@ void ccmode_factory_gcm_encrypt(struct ccmode_gcm *gcm,
     *gcm = gcm_encrypt;
 }
 
+extern const void *(*_ccaes_ecb_encrypt_mode)(void);
+const struct ccmode_ecb *ccaes_ecb_encrypt_mode(void) {
+    return (const struct ccmode_ecb*)_ccaes_ecb_encrypt_mode();
+}
+
 const struct ccmode_gcm *ccaes_gcm_decrypt_mode(void)
 {
     static struct ccmode_gcm gcm_decrypt;

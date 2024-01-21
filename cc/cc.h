@@ -1,4 +1,4 @@
-#ifndef _CCN_H_
+#ifndef _CC_H_
 #define _CC_H_
 
 #include <stddef.h>
@@ -240,4 +240,17 @@ typedef struct {
     else                                                                    \
         (_ccn_)[__k/CCN_UNIT_BITS] &= ~(CC_UNIT_C(1) << (__k & (CCN_UNIT_BITS - 1)));  \
     })
+
+/* number of array elements used in a cc_ctx_decl */
+#define cc_ctx_n(_type_, _size_) ((_size_ + sizeof(_type_) - 1) / sizeof(_type_))
+
+/* sizeof of a context declared with cc_ctx_decl */
+#define cc_ctx_sizeof(_type_, _size_) sizeof(_type_[cc_ctx_n(_type_, _size_)])
+
+#define cc_ctx_decl(_type_, _size_, _name_)  \
+    _type_ _name_[cc_ctx_n(_type_, _size_)]
+
+void cc_clear(size_t len, void *dst);
+int cc_cmp_safe (size_t num, const void * ptr1, const void * ptr2);
+
 #endif

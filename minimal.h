@@ -44,6 +44,9 @@
 #include <Security/Security.h>
 #include <Security/SecureTransport.h>
 
+#ifndef _MINIMAL_H_
+#define _MINIMAL_H_
+
 #undef USE_CDSA_CRYPTO              /* use corecrypto, instead of CDSA */
 #undef USE_SSLCERTIFICATE           /* use CF-based certs, not structs */
 #define ENABLE_SSLV2                0
@@ -661,9 +664,25 @@ const HashReference *_SSLHashSHA384;
 
 int (*_SSLAllocBuffer)(SSLBuffer *buf, size_t length);
 int (*_SSLFreeBuffer)(SSLBuffer *buf);
-uint32_t (*_SSLDecodeInt)(
-    const uint8_t *     p,
-    size_t              length);
+
+uint32_t (*_SSLDecodeInt)(const uint8_t * p, size_t length);
+uint8_t* (*_SSLEncodeInt)(uint8_t *p, size_t value, size_t length);
+
+void (*_SSLDecodeUInt64)(const uint8_t *p, size_t length, uint64_t *v);
+uint8_t* (_SSLEncodeUInt64)(uint8_t *p, uint64_t value);
+
+
+#define CCRNG_STATE_COMMON                                                          \
+    int (*generate)(struct ccrng_state *rng, unsigned long outlen, void *out);
+
+/* default state structure - do not instantiate, instead use the specific one you need */
+struct ccrng_state {
+    CCRNG_STATE_COMMON
+};
+
+#define ccrng_generate(ctx, outlen, out) ((ctx)->generate((ctx), (outlen), (out)))
+struct ccrng_state* (*ccDRBGGetRngState)(void);
+
 OSStatus (*_sslFreePubKey)(SSLPubKey **pubKey);
 OSStatus (*_sslGetPubKeyFromBits)(
     SSLContext          *ctx,
@@ -719,8 +738,10 @@ typedef int (*SSLKeyFunc)(
                                SymCipherContext *cipherCtx);
 typedef int (*SSLSetIVFunc)(
                                  const uint8_t *iv,
-                                 size_t len,
                                  SymCipherContext cipherCtx);
+typedef int (*SSLGetIVFunc)(
+                                uint8_t *iv,
+                                SymCipherContext cipherCtx);
 typedef int (*SSLAddADD)(
                               const uint8_t *src,
                               size_t len,
@@ -737,15 +758,6 @@ typedef int (*SSLAEADDoneFunc)(
                                     size_t *macLen,
                                     SymCipherContext cipherCtx);
 
-int (*_CCSymmInit)(
-    const SSLSymmetricCipherParams *params,
-    int encrypting,
-    uint8_t *key,
-    uint8_t* iv,
-    SymCipherContext *cipherCtx);
-int (*_CCSymmFinish)(
-    SymCipherContext cipherCtx);
-
 /* Statically defined description of a symmetric cipher. */
 typedef struct {
     SSLKeyFunc      	initialize;
@@ -756,6 +768,7 @@ typedef struct {
 typedef struct {
     SSLKeyFunc      	initialize;
     SSLSetIVFunc        setIV;
+    SSLGetIVFunc        getIV;
     SSLAddADD           update;
     SSLCryptFunc    	encrypt;
     SSLCryptFunc    	decrypt;
@@ -764,8 +777,7 @@ typedef struct {
 } AEADCipher;
 
 static int CCSymmAEADSetIV(
-    const uint8_t *iv,
-    size_t len,
+    const uint8_t *srcIV,
     SymCipherContext cipherCtx);
 static int CCSymmAddADD(
     const uint8_t *src,
@@ -904,6 +916,55 @@ typedef void *SSLIOConnectionRef;
 
 typedef int (*SSLIOReadFunc)(SSLIOConnectionRef connection, void *data, size_t *dataLength);
 typedef int (*SSLIOWriteFunc)(SSLIOConnectionRef connection, const void *data, size_t *dataLength);
+
+/*
+ * We should remove this and use uint64_t all over.
+ */
+typedef uint64_t sslUint64;
+
+/***
+ *** Each of {TLS, SSLv3} implements each of these functions.
+ ***/
+
+/* unpack, decrypt, validate one record */
+typedef int (*decryptRecordFcn) (
+	uint8_t type,
+	SSLBuffer *payload,
+	struct SSLRecordInternalContext *ctx);
+
+/* pack, encrypt, mac, queue one outgoing record */
+typedef int (*writeRecordFcn) (
+	SSLRecord rec,
+	struct SSLRecordInternalContext *ctx);
+
+/* initialize a per-CipherContext HashHmacContext for use in MACing each record */
+typedef int (*initMacFcn) (
+    CipherContext *cipherCtx		// macRef, macSecret valid on entry
+									// macCtx valid on return
+);
+
+/* free per-CipherContext HashHmacContext */
+typedef int (*freeMacFcn) (
+	CipherContext *cipherCtx);
+
+/* compute MAC on one record */
+typedef int (*computeMacFcn) (
+	uint8_t type,
+	SSLBuffer data,
+	SSLBuffer mac, 					// caller mallocs data
+	CipherContext *cipherCtx,		// assumes macCtx, macRef
+	sslUint64 seqNo,
+	struct SSLRecordInternalContext *ctx);
+
+
+typedef struct _SslRecordCallouts {
+	decryptRecordFcn			decryptRecord;
+	writeRecordFcn				writeRecord;
+	initMacFcn					initMac;
+	freeMacFcn					freeMac;
+	computeMacFcn				computeMac;
+} SslRecordCallouts;
+
 struct SSLRecordInternalContext
 {
     /* I/O */
@@ -928,10 +989,22 @@ struct SSLRecordInternalContext
     /* protocol */
     bool                isDTLS;
     SSLProtocolVersion  negProtocolVersion;	/* negotiated */
-    const struct SslRecordCallouts *sslTslCalls;
-    
+    const SslRecordCallouts *sslTslCalls;
 };
 
+enum {
+    errSSLRecordParam               = -50,     /* One or more parameters passed to a function were not valid. */
+    errSSLRecordInternal            = -10000,
+    errSSLRecordWouldBlock          = -10001,
+    errSSLRecordProtocol            = -10002,
+    errSSLRecordNegotiation         = -10003,
+    errSSLRecordClosedAbort         = -10004,
+	errSSLRecordConnectionRefused   = -10005,	/* peer dropped connection before responding */
+	errSSLRecordDecryptionFail      = -10006,	/* decryption failure */
+	errSSLRecordBadRecordMac        = -10007,	/* bad MAC */
+	errSSLRecordRecordOverflow      = -10008,	/* record overflow */
+	errSSLRecordUnexpectedRecord    = -10009,	/* unexpected (skipped) record in DTLS */
+};
 
 // API
 #ifdef __cplusplus
@@ -943,3 +1016,5 @@ OSStatus custom_SSLProcessServerKeyExchange(SSLBuffer message, SSLContext *ctx);
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* _MINIMAL_H_ */

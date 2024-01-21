@@ -1,23 +1,17 @@
 #include <CommonCrypto/CommonCrypto.h>
 #include "minimal.h"
 #include "cc_gcm.h"
+#include "ccaes_gcm_mode.h"
 
 #define TLS_AES_GCM_TAG_SIZE 16
 #define TLS_AES_GCM_IMPLICIT_IV_SIZE 4
 #define TLS_AES_GCM_EXPLICIT_IV_SIZE 8
 
-enum {
-    errSSLRecordInternal            = -10000,
-    errSSLRecordWouldBlock          = -10001,
-    errSSLRecordProtocol            = -10002,
-    errSSLRecordNegotiation         = -10003,
-    errSSLRecordClosedAbort         = -10004,
-	errSSLRecordConnectionRefused   = -10005,	/* peer dropped connection before responding */
-	errSSLRecordDecryptionFail      = -10006,	/* decryption failure */
-	errSSLRecordBadRecordMac        = -10007,	/* bad MAC */
-	errSSLRecordRecordOverflow      = -10008,	/* record overflow */
-	errSSLRecordUnexpectedRecord    = -10009,	/* unexpected (skipped) record in DTLS */
-};
+#define SSLDecodeUInt64 (*_SSLDecodeUInt64)
+#define SSLEncodeUInt64 (*_SSLEncodeUInt64)
+#define SSLFreeBuffer (*_SSLFreeBuffer)
+
+#define ccDRBGGetRngState (*ccDRBGGetRngState)
 
 struct SymCipherContext {
     const struct ccmode_gcm *gcm;
@@ -33,14 +27,13 @@ int CCGCMSymmInit(
                   int encrypting,
                   uint8_t *key,
                   uint8_t* iv,
-                  struct ccrng_state *rng,
                   SymCipherContext *cipherCtx)
 {
     SymCipherContext ctx = *cipherCtx;
 
     /* FIXME: this should not be needed as long as CCSymFinish is called */
     if(ctx) {
-        sslFree(ctx);
+        free(ctx);
         ctx = NULL;
     }
 
@@ -58,6 +51,7 @@ int CCGCMSymmInit(
     ccgcm_init(gcm, ctx->gcmCtx, params->keySize, key);
     memcpy(ctx->gcmIV, iv, TLS_AES_GCM_IMPLICIT_IV_SIZE);
 
+    struct ccrng_state* rng = ccDRBGGetRngState();
     ccrng_generate(rng, TLS_AES_GCM_EXPLICIT_IV_SIZE, &ctx->gcmIV[TLS_AES_GCM_IMPLICIT_IV_SIZE]);
 
     *cipherCtx = ctx;
@@ -81,7 +75,8 @@ int CCSymmAEADSetIV(
     ccgcm_set_iv(cipherCtx->gcm, cipherCtx->gcmCtx, TLS_AES_GCM_IMPLICIT_IV_SIZE+TLS_AES_GCM_EXPLICIT_IV_SIZE, cipherCtx->gcmIV);
 
     /* Increment IV */
-    iv = SSLDecodeUInt64(&cipherCtx->gcmIV[TLS_AES_GCM_IMPLICIT_IV_SIZE], 8);
+    //iv = SSLDecodeUInt64(&cipherCtx->gcmIV[TLS_AES_GCM_IMPLICIT_IV_SIZE], 8);
+    SSLDecodeUInt64(&cipherCtx->gcmIV[TLS_AES_GCM_IMPLICIT_IV_SIZE], 8, &iv);
     iv++;
     SSLEncodeUInt64(&cipherCtx->gcmIV[TLS_AES_GCM_IMPLICIT_IV_SIZE], iv);
     return 0;
@@ -128,7 +123,7 @@ int CCSymmAEADDecrypt(
 {
     int err = 0;
     if(cipherCtx == NULL || cipherCtx->gcm == NULL) {
-        printf("CCSymmAEADDecrypt: NULL cipherCtx\n");
+        sslErrorLog("CCSymmAEADDecrypt: NULL cipherCtx\n");
         return -1;
     }
     uint8_t computedTag[TLS_AES_GCM_TAG_SIZE];
@@ -165,11 +160,29 @@ int CCSymmFinish(
 {
     if(cipherCtx) {
         ccgcm_ctx_clear(cipherCtx->gcm->size, cipherCtx->gcmCtx);
-        sslFree(cipherCtx->gcmCtx);
-        sslFree(cipherCtx);
+        free(cipherCtx->gcmCtx);
+        free(cipherCtx);
     }
     return 0;
 }
+
+const SSLSymmetricCipherParams SSLCipherAES_128_GCMParams = {
+    .keyAlg = SSL_CipherAlgorithmAES_128_GCM,
+    .keySize = 16,
+    .ivSize = 16,
+    .blockSize = 16,
+    .cipherType = aeadCipherType,
+};
+
+const SSLSymmetricCipherParams SSLCipherAES_256_GCMParams = {
+    .keyAlg = SSL_CipherAlgorithmAES_256_GCM,
+    .keySize = 32,
+    .ivSize = 16,
+    .blockSize = 16,
+    .cipherType = aeadCipherType,
+};
+
+// Normally .getIV doesn't exist in iOS 6 struct at all but it's ok since we pass pointers
 
 const SSLSymmetricCipher SSLCipherAES_128_GCM = {
     .params = &SSLCipherAES_128_GCMParams,

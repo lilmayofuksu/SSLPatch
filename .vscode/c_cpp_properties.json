@@ -5,13 +5,13 @@
             "includePath": [
                 "D:/Programs-SDK-s/iPhoneOS6.0.sdk/usr/include/**",
                 "D:/Programs-SDK-s/iPhoneOS6.0.sdk/usr/include",
-                "D:/Programs-SDK-s/iPhoneOS6.0.sdk/System/Library/Frameworks/Security.framework/Headers",
                 "${workspaceFolder}",
                 "${workspaceFolder}/**",
                 "${workspaceFolder}/cc",
                 "${workspaceFolder}/cc/vng"
             ],
             "defines": [
+                "__NO_ASM__"
             ],
             "compilerPath": "D:/Programs-SDK-s/LLVM-10/bin/clang.exe",
             "compilerArgs": [

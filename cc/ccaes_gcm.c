@@ -402,6 +402,87 @@ errOut:
     return;
 }
 
+void ccmode_gcm_decrypt(ccgcm_ctx *key, size_t nbytes,
+                        const void *in, void *out) {
+    size_t x, y;
+    unsigned char b;
+
+    if (_CCMODE_GCM_KEY(key)->mode == CCMODE_GCM_MODE_IV) {
+        // This allows the gmac routine to be skipped by callers.
+        ccmode_gcm_gmac(key, 0, NULL);
+    }
+    /* in AAD mode? */
+    if (_CCMODE_GCM_KEY(key)->mode == CCMODE_GCM_MODE_AAD) {
+        /* let's process the AAD */
+        if (CCMODE_GCM_KEY_PAD_LEN(key)) {
+            _CCMODE_GCM_KEY(key)->totlen += CCMODE_GCM_KEY_PAD_LEN(key) * (uint64_t)(8);
+            ccmode_gcm_mult_h(key, CCMODE_GCM_KEY_X(key));
+        }
+
+        /* increment counter */
+        for (y = 15; y >= 12; y--) {
+            if (++CCMODE_GCM_KEY_Y(key)[y] & 255) { break; }
+        }
+        /* encrypt the counter */
+        CCMODE_GCM_KEY_ECB(key)->ecb(CCMODE_GCM_KEY_ECB_KEY(key), 1,
+                                     CCMODE_GCM_KEY_Y(key),
+                                     CCMODE_GCM_KEY_PAD(key));
+        CCMODE_GCM_KEY_PAD_LEN(key) = 0;
+        _CCMODE_GCM_KEY(key)->mode   = CCMODE_GCM_MODE_TEXT;
+        _CCMODE_GCM_KEY(key)->pttotlen = 0;
+    }
+
+    cc_require(_CCMODE_GCM_KEY(key)->mode == CCMODE_GCM_MODE_TEXT,errOut); /* CRYPT_INVALID_ARG */
+
+    x = 0;
+    const unsigned char *ct = in;
+    unsigned char *pt = out;
+#ifdef CCMODE_GCM_FAST
+    if (CCMODE_GCM_KEY_PAD_LEN(key) == 0) {
+        for (x = 0; x < (nbytes & ~15U); x += 16) {
+            /* ctr encrypt */
+            for (y = 0; y < 16; y += sizeof(CCMODE_GCM_FAST_TYPE)) {
+                *((CCMODE_GCM_FAST_TYPE*)(&_CCMODE_GCM_KEY(key)->X[y])) ^= *((const CCMODE_GCM_FAST_TYPE*)(&ct[x+y]));
+                *((CCMODE_GCM_FAST_TYPE*)(&pt[x + y])) = *((const CCMODE_GCM_FAST_TYPE*)(&ct[x+y])) ^ *((CCMODE_GCM_FAST_TYPE*)(&CCMODE_GCM_KEY_PAD(key)[y]));
+            }
+            /* GMAC it */
+            _CCMODE_GCM_KEY(key)->pttotlen += 128;
+            ccmode_gcm_mult_h(key, _CCMODE_GCM_KEY(key)->X);
+            /* increment counter */
+            for (y = 15; y >= 12; y--) {
+                if (++CCMODE_GCM_KEY_Y(key)[y] & 255) { break; }
+            }
+            CCMODE_GCM_KEY_ECB(key)->ecb(CCMODE_GCM_KEY_ECB_KEY(key), 1,
+                                         CCMODE_GCM_KEY_Y(key),
+                                         CCMODE_GCM_KEY_PAD(key));
+        }
+    }
+#endif // CCMODE_GCM_FAST
+
+    /* process text */
+    for (; x < nbytes; x++) {
+        if (CCMODE_GCM_KEY_PAD_LEN(key) == 16) {
+            _CCMODE_GCM_KEY(key)->pttotlen += 128;
+            ccmode_gcm_mult_h(key, CCMODE_GCM_KEY_X(key));
+
+            /* increment counter */
+            for (y = 15; y >= 12; y--) {
+                if (++CCMODE_GCM_KEY_Y(key)[y] & 255) { break; }
+            }
+            CCMODE_GCM_KEY_ECB(key)->ecb(CCMODE_GCM_KEY_ECB_KEY(key), 1,
+                                         CCMODE_GCM_KEY_Y(key),
+                                         CCMODE_GCM_KEY_PAD(key));
+            CCMODE_GCM_KEY_PAD_LEN(key) = 0;
+        }
+
+        b = ct[x];
+        pt[x] = ct[x] ^ CCMODE_GCM_KEY_PAD(key)[CCMODE_GCM_KEY_PAD_LEN(key)];
+        CCMODE_GCM_KEY_X(key)[CCMODE_GCM_KEY_PAD_LEN(key)++] ^= b;
+    }
+errOut:
+    return;
+}
+
 void ccmode_gcm_encrypt(ccgcm_ctx *key, size_t nbytes,
                        const void *in, void *out) {
     size_t x, y;

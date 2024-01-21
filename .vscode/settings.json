@@ -7,6 +7,18 @@
         "cc_config.h": "c",
         "cc.h": "c",
         "minimal.h": "c",
-        "commoncrypto.h": "c"
+        "commoncrypto.h": "c",
+        "commonhmac.h": "c",
+        "commondigest.h": "c",
+        "availability.h": "c",
+        "securetransport.h": "c",
+        "security.h": "c",
+        "seccertificate.h": "c",
+        "secimportexport.h": "c",
+        "cfarray.h": "c",
+        "cfbase.h": "c",
+        "targetconditionals.h": "c",
+        "ssl_hooks.h": "c",
+        "ccaes_gcm_mode.h": "c"
     }
 }

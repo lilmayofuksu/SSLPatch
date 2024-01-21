@@ -73,6 +73,7 @@ const void *(*_ccaes_ecb_encrypt_mode)(void);
     MSImageRef image = NULL;
 
     void *_SSLProcessServerKeyExchange = NULL;
+    void *_SSLInitPendingCiphers = NULL;
     void *_InitCipherSpec = NULL;
     void *_ssl3WriteRecord = NULL;
     void *_tls1DecryptRecord = NULL;
@@ -110,7 +111,7 @@ const void *(*_ccaes_ecb_encrypt_mode)(void);
     LOAD_SYMBOL(ccaes_ecb_encrypt_mode);
     LOAD_SYMBOL(SSLDecodeUInt64);
     LOAD_SYMBOL(SSLEncodeUInt64);
-    LOAD_SYMBOL(_sslRand);
+    LOAD_SYMBOL(sslRand);
     LOAD_SYMBOL(ccDRBGGetRngState);
 
     PatchKnownCipherSuites(image);

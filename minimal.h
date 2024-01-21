@@ -669,7 +669,7 @@ uint32_t (*_SSLDecodeInt)(const uint8_t * p, size_t length);
 uint8_t* (*_SSLEncodeInt)(uint8_t *p, size_t value, size_t length);
 
 void (*_SSLDecodeUInt64)(const uint8_t *p, size_t length, uint64_t *v);
-uint8_t* (_SSLEncodeUInt64)(uint8_t *p, uint64_t value);
+uint8_t* (*_SSLEncodeUInt64)(uint8_t *p, uint64_t value);
 
 
 #define CCRNG_STATE_COMMON                                                          \
@@ -681,7 +681,7 @@ struct ccrng_state {
 };
 
 #define ccrng_generate(ctx, outlen, out) ((ctx)->generate((ctx), (outlen), (out)))
-struct ccrng_state* (*ccDRBGGetRngState)(void);
+struct ccrng_state* (*_ccDRBGGetRngState)(void);
 
 OSStatus (*_sslFreePubKey)(SSLPubKey **pubKey);
 OSStatus (*_sslGetPubKeyFromBits)(
@@ -925,6 +925,8 @@ typedef uint64_t sslUint64;
 /***
  *** Each of {TLS, SSLv3} implements each of these functions.
  ***/
+
+struct SSLRecordInternalContext;
 
 /* unpack, decrypt, validate one record */
 typedef int (*decryptRecordFcn) (

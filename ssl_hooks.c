@@ -197,7 +197,7 @@ int custom_ssl3WriteRecord(
 	struct SSLRecordInternalContext *ctx)
 {
     if (ctx->selectedCipher != SSL_CipherAlgorithmAES_256_GCM || ctx->selectedCipher != SSL_CipherAlgorithmAES_128_GCM)
-        return orig_SSLInitPendingCiphers(ctx);
+        return custom_ssl3WriteRecord(rec, ctx);
 
 	int        err;
     int             padding = 0, i;

@@ -11,7 +11,7 @@
 #define SSLEncodeUInt64 (*_SSLEncodeUInt64)
 #define SSLFreeBuffer (*_SSLFreeBuffer)
 
-#define ccDRBGGetRngState (*ccDRBGGetRngState)
+#define ccDRBGGetRngState (*_ccDRBGGetRngState)
 
 struct SymCipherContext {
     const struct ccmode_gcm *gcm;

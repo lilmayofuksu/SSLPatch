@@ -19,7 +19,7 @@ typedef size_t cc_size;
 #endif
 
 #ifndef cc_require
-#if __CC_DEBUG_ASSERT_PRODUCTION_CODE
+#if 1 //__CC_DEBUG_ASSERT_PRODUCTION_CODE
     #define cc_require(assertion, exceptionLabel) \
         do { \
             if ( __builtin_expect(!(assertion), 0) ) { \

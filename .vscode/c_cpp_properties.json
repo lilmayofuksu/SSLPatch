@@ -1,0 +1,30 @@
+{
+    "configurations": [
+        {
+            "name": "Win32",
+            "includePath": [
+                "D:/Programs-SDK-s/iPhoneOS6.0.sdk/usr/include/**",
+                "D:/Programs-SDK-s/iPhoneOS6.0.sdk/usr/include",
+                "D:/Programs-SDK-s/iPhoneOS6.0.sdk/System/Library/Frameworks/Security.framework/Headers",
+                "${workspaceFolder}",
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/cc",
+                "${workspaceFolder}/cc/vng"
+            ],
+            "defines": [
+            ],
+            "compilerPath": "D:/Programs-SDK-s/LLVM-10/bin/clang.exe",
+            "compilerArgs": [
+                "-isysroot",
+                "D:\\Programs-SDK-s\\iPhoneOS6.0.sdk",
+                "--target=armv7-apple-darwin13.0.0",
+                "-mfpu=neon",
+                "-march=armv7"
+            ],
+            "cStandard": "c11",
+            "cppStandard": "c++11",
+            "intelliSenseMode": "macos-clang-arm"
+        }
+    ],
+    "version": 4
+}

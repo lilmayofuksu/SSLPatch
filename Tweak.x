@@ -27,6 +27,9 @@ MSImageRef MSGetImageByName(const char *file);
 void *MSFindSymbol(MSImageRef image, const char *name);
 void MSHookFunction(void *symbol, void *replace, void **result);
 
+extern const SSLSymmetricCipher SSLCipherAES_128_GCM;
+extern const SSLSymmetricCipher SSLCipherAES_256_GCM;
+
 #define LIBRARY_PATH "/System/Library/Frameworks/Security.framework/Security"
 #define LOAD_SYMBOL(name) do { \
     _ ## name = MSFindSymbol(image, "_" #name); \
@@ -35,6 +38,39 @@ void MSHookFunction(void *symbol, void *replace, void **result);
         return; \
     } \
 } while(0)
+
+// the other way is just patch all functions that uses KnownCipherSuites and I'm NOT doing that
+// at least for now..
+void PatchKnownCipherSuites(MSImageRef image) {
+    SSLCipherSuite* array = (SSLCipherSuite*)MSFindSymbol(image, "_KnownCipherSuites");
+    if (array == NULL) {
+        NSLog(@"it overload..");
+        return;
+    }
+
+    array[4] = TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256; //TLS_ECDHE_ECDSA_WITH_RC4_128_SHA
+    array[10] = TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384; //TLS_ECDHE_RSA_WITH_RC4_128_SHA
+}
+
+//extern "C" {
+    void (*_InitCipherSpec)(struct SSLRecordInternalContext *ctx, uint16_t selectedCipher);
+    void (*old_InitCipherSpec)(struct SSLRecordInternalContext *ctx, uint16_t selectedCipher);
+
+    void custom_InitCipherSpec(struct SSLRecordInternalContext *ctx, uint16_t selectedCipher) {
+        old_InitCipherSpec(ctx, selectedCipher); // dirty hack to get macAlgorithm correct lol
+
+        if (selectedCipher == TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 || selectedCipher == TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384) {
+            SSLRecordCipherSpec *dst = &ctx->selectedCipherSpec;
+            ctx->selectedCipher = selectedCipher;
+
+            if (selectedCipher == TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384)
+                dst->cipher = &SSLCipherAES_256_GCM;
+            else 
+                dst->cipher = &SSLCipherAES_128_GCM;
+        }
+        return;
+    }
+//}
 
 %ctor {
     MSImageRef image = NULL;
@@ -47,6 +83,7 @@ void MSHookFunction(void *symbol, void *replace, void **result);
     }
 
     LOAD_SYMBOL(SSLProcessServerKeyExchange);
+    LOAD_SYMBOL(InitCipherSpec);
     LOAD_SYMBOL(CSSMOID_SHA1WithRSA);
     LOAD_SYMBOL(CSSMOID_SHA256WithRSA);
     LOAD_SYMBOL(CSSMOID_SHA384WithRSA);
@@ -63,6 +100,11 @@ void MSHookFunction(void *symbol, void *replace, void **result);
     LOAD_SYMBOL(SSLDecodeDHKeyParams);
     LOAD_SYMBOL(sslRsaVerify);
     LOAD_SYMBOL(sslRawVerify);
+    LOAD_SYMBOL(CCSymmInit);
+    LOAD_SYMBOL(CCSymmFinish);
+
+    PatchKnownCipherSuites(image);
 
     MSHookFunction(_SSLProcessServerKeyExchange, custom_SSLProcessServerKeyExchange, NULL);
+    MSHookFunction(_InitCipherSpec, custom_InitCipherSpec, (void **)&old_InitCipherSpec);
 }

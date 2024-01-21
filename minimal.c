@@ -42,6 +42,9 @@
  */
 
 #include "minimal.h"
+#include <string.h>
+
+#define assert(cond) 
 
 // Interpose
 #define CSSMOID_SHA1WithRSA (*_CSSMOID_SHA1WithRSA)

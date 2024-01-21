@@ -110,6 +110,19 @@ typedef struct
     uint8_t *data;
 } SSLBuffer;
 
+/* Cipher Algorithm */
+typedef enum {
+    SSL_CipherAlgorithmNull,
+    SSL_CipherAlgorithmRC2_128,
+    SSL_CipherAlgorithmRC4_128,
+    SSL_CipherAlgorithmDES_CBC,
+    SSL_CipherAlgorithm3DES_CBC,
+    SSL_CipherAlgorithmAES_128_CBC,
+    SSL_CipherAlgorithmAES_256_CBC,
+    SSL_CipherAlgorithmAES_128_GCM,
+    SSL_CipherAlgorithmAES_256_GCM,
+} SSL_CipherAlgorithm;
+
 /*
  * These are the named curves from RFC 4492
  * section 5.1.1, with the exception of SSL_Curve_None which means
@@ -323,6 +336,8 @@ typedef enum
     SSL_CurveTypeExplicitChar2 = 2,
     SSL_CurveTypeNamed         = 3      /* the only one we support */
 } SSL_ECDSA_CurveTypes;
+
+//typedef uint16_t SSLCipherSuite;
 
 struct SSLContext
 {
@@ -675,6 +690,248 @@ OSStatus (*_sslRawVerify)(
     size_t              plainTextLen,
     const uint8_t       *sig,
     size_t              sigLen);
+
+typedef enum
+{
+    streamCipherType,
+    blockCipherType,
+    aeadCipherType
+} CipherType;
+
+typedef struct
+{
+    SSL_CipherAlgorithm keyAlg;
+    CipherType cipherType;
+    uint8_t keySize; /* Sizes are in bytes */
+    uint8_t ivSize;
+    uint8_t blockSize;
+} SSLSymmetricCipherParams;
+
+/* All symmetric ciphers go thru these callouts. */
+struct SymCipherContext;
+typedef struct SymCipherContext *SymCipherContext;
+
+typedef int (*SSLKeyFunc)(
+                               const SSLSymmetricCipherParams *params,
+                               int encrypting,
+                               uint8_t *key,
+                               uint8_t *iv,
+                               SymCipherContext *cipherCtx);
+typedef int (*SSLSetIVFunc)(
+                                 const uint8_t *iv,
+                                 size_t len,
+                                 SymCipherContext cipherCtx);
+typedef int (*SSLAddADD)(
+                              const uint8_t *src,
+                              size_t len,
+                              SymCipherContext cipherCtx);
+typedef int (*SSLCryptFunc)(
+                                 const uint8_t *src,
+                                 uint8_t *dest,
+                                 size_t len,
+                                 SymCipherContext cipherCtx);
+typedef int (*SSLFinishFunc)(
+                                  SymCipherContext cipherCtx);
+typedef int (*SSLAEADDoneFunc)(
+                                    uint8_t *mac,
+                                    size_t *macLen,
+                                    SymCipherContext cipherCtx);
+
+int (*_CCSymmInit)(
+    const SSLSymmetricCipherParams *params,
+    int encrypting,
+    uint8_t *key,
+    uint8_t* iv,
+    SymCipherContext *cipherCtx);
+int (*_CCSymmFinish)(
+    SymCipherContext cipherCtx);
+
+/* Statically defined description of a symmetric cipher. */
+typedef struct {
+    SSLKeyFunc      	initialize;
+    SSLCryptFunc    	encrypt;
+    SSLCryptFunc    	decrypt;
+} Cipher;
+
+typedef struct {
+    SSLKeyFunc      	initialize;
+    SSLSetIVFunc        setIV;
+    SSLAddADD           update;
+    SSLCryptFunc    	encrypt;
+    SSLCryptFunc    	decrypt;
+    SSLAEADDoneFunc     done;
+    uint8_t          	macSize;
+} AEADCipher;
+
+static int CCSymmAEADSetIV(
+    const uint8_t *iv,
+    size_t len,
+    SymCipherContext cipherCtx);
+static int CCSymmAddADD(
+    const uint8_t *src,
+    size_t len,
+    SymCipherContext cipherCtx);
+static int CCSymmAEADEncrypt(
+    const uint8_t *src,
+    uint8_t *dest,
+    size_t len,
+    SymCipherContext cipherCtx);
+static int CCSymmAEADDecrypt(
+    const uint8_t *src,
+    uint8_t *dest,
+    size_t len,
+    SymCipherContext cipherCtx);
+static int CCSymmAEADDone(
+    uint8_t *mac,
+    size_t *macLen,
+    SymCipherContext cipherCtx);
+
+typedef struct SSLSymmetricCipher {
+    const SSLSymmetricCipherParams *params;
+    SSLFinishFunc   	finish;
+    union {
+        const Cipher    cipher;  /* stream or block cipher type */
+        const AEADCipher aead;   /* aeadCipherType */
+    } c;
+} SSLSymmetricCipher;
+
+typedef struct WaitingRecord
+{   struct WaitingRecord    *next;
+    size_t                  sent;
+    /*
+     * These two fields replace a dynamically allocated SSLBuffer;
+     * the payload to write is contained in the variable-length
+     * array data[].
+     */
+    size_t					length;
+    uint8_t					data[1];
+} WaitingRecord;
+
+typedef struct HMACContext  *HMACContextRef;
+struct HMACReference;
+
+/* Create an HMAC session */
+typedef int (*HMAC_AllocFcn) (
+	const struct HMACReference	*hmac,
+	const void					*keyPtr,
+	size_t                      keyLen,
+	HMACContextRef				*hmacCtx);			// RETURNED
+
+/* Free a session */
+typedef int (*HMAC_FreeFcn) (
+	HMACContextRef	hmacCtx);	
+	
+/* Reusable init, using same key */
+typedef int (*HMAC_InitFcn) (
+	HMACContextRef	hmacCtx);
+
+/* normal crypt ops */
+typedef int (*HMAC_UpdateFcn) (
+	HMACContextRef	hmacCtx,
+	const void		*data,
+	size_t          dataLen);
+	
+typedef int (*HMAC_FinalFcn) (
+	HMACContextRef	hmacCtx,
+	void			*hmac,			// mallocd by caller
+	size_t          *hmacLen);		// IN/OUT
+
+/* one-shot */
+typedef int (*HMAC_HmacFcn) (
+	HMACContextRef	hmacCtx,
+	const void		*data,
+	size_t          dataLen,
+	void			*hmac,			// mallocd by caller
+	size_t          *hmacLen);		// IN/OUT
+	
+typedef struct HMACReference {
+    size_t          macSize;
+    HMAC_Algs		alg;
+	HMAC_AllocFcn	alloc;
+	HMAC_FreeFcn	free;
+	HMAC_InitFcn	init;
+	HMAC_UpdateFcn	update;
+	HMAC_FinalFcn	final;
+	HMAC_HmacFcn	hmac;
+} HMACReference;
+
+typedef struct HMACParams {
+} HMACParams;
+typedef struct {
+    const HashReference	*hash;
+    const HMACReference	*hmac;
+} HashHmacReference;
+
+typedef struct {
+    const HashHmacReference     *macAlgorithm;
+    const SSLSymmetricCipher          *cipher;
+} SSLRecordCipherSpec;
+
+typedef union {
+    SSLBuffer			hashCtx;
+    HMACContextRef		hmacCtx;
+} HashHmacContext;
+
+/*
+ * An SSLRecordContext contains four of these - one for each of {read,write} and for
+ * {current, pending}.
+ */
+typedef struct CipherContext
+{
+    const HashHmacReference   	*macRef;			/* HMAC (TLS) or digest (SSL) */
+    const SSLSymmetricCipher  	*symCipher;
+
+    /* this is a context which is reused once per record */
+    HashHmacContext				macCtx;
+    /*
+     * Crypto context (eg: for CommonCrypto-based symmetric ciphers, this will be a CCCryptorRef)
+     */
+    SymCipherContext            cipherCtx;
+
+    /* encrypt or decrypt. needed in CDSASymmInit, may not be needed anymore (TODO)*/
+    uint8_t						encrypting;
+
+    uint64_t          			sequenceNum;
+    uint8_t            			ready;
+
+    /* in SSL2 mode, the macSecret is the same size as the
+     * cipher key - which is 24 bytes in the 3DES case. */
+    uint8_t						macSecret[48 /* SSL_MAX_DIGEST_LEN */];
+} CipherContext;
+
+
+typedef void *SSLIOConnectionRef;
+
+typedef int (*SSLIOReadFunc)(SSLIOConnectionRef connection, void *data, size_t *dataLength);
+typedef int (*SSLIOWriteFunc)(SSLIOConnectionRef connection, const void *data, size_t *dataLength);
+struct SSLRecordInternalContext
+{
+    /* I/O */
+    SSLIOReadFunc       read;
+    SSLIOWriteFunc      write;
+    SSLIOConnectionRef  ioRef;
+    
+    /* buffering */
+    SSLBuffer    		partialReadBuffer;
+    size_t              amountRead;
+    WaitingRecord       *recordWriteQueue;
+    
+    /* ciphers */
+    uint16_t            selectedCipher;			/* currently selected */
+    SSLRecordCipherSpec selectedCipherSpec;     /* ditto */
+    CipherContext       readCipher;
+    CipherContext       writeCipher;
+    CipherContext       readPending;
+    CipherContext       writePending;
+    CipherContext       prevCipher;             /* previous write cipher context, used for retransmit */
+    
+    /* protocol */
+    bool                isDTLS;
+    SSLProtocolVersion  negProtocolVersion;	/* negotiated */
+    const struct SslRecordCallouts *sslTslCalls;
+    
+};
+
 
 // API
 #ifdef __cplusplus

@@ -62,7 +62,7 @@
 #  10/5/15
 # 
 
-#ifndef __NO_ASM__
+#ifndef __SSLPATCH_NO_ASM__
 #include "cc_config.h"
 #if CCAES_ARM
 #if !defined(__arm64__) && defined(__ARM_NEON__)
@@ -307,4 +307,4 @@ _gcm_ghash:
 #endif
 
 #endif  // CCAES_ARM
-#endif /* __NO_ASM__ */
+#endif /* __SSLPATCH_NO_ASM__ */

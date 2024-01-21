@@ -11,15 +11,15 @@
                 "${workspaceFolder}/cc/vng"
             ],
             "defines": [
-                "__NO_ASM__"
+                "__SSLPATCH_NO_ASM__"
             ],
             "compilerPath": "D:/Programs-SDK-s/LLVM-10/bin/clang.exe",
             "compilerArgs": [
                 "-isysroot",
                 "D:\\Programs-SDK-s\\iPhoneOS6.0.sdk",
-                "--target=armv7-apple-darwin13.0.0",
+                "--target=armv7s-apple-darwin13.0.0",
                 "-mfpu=neon",
-                "-march=armv7"
+                "-march=armv7s"
             ],
             "cStandard": "c11",
             "cppStandard": "c++11",

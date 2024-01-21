@@ -70,7 +70,7 @@
 #define CCMODE_GCM_VNG_SPEEDUP
 #define CCAES_ARM
 
-#if !defined(__NO_ASM__) && defined(CCMODE_GCM_VNG_SPEEDUP)
+#if !defined(__SSLPATCH_NO_ASM__) && defined(CCMODE_GCM_VNG_SPEEDUP)
 
 void ccaes_vng_gcm_init(const struct ccmode_gcm *gcm, ccgcm_ctx *key,
                      size_t rawkey_len, const void *rawkey) {

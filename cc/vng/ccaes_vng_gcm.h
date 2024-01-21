@@ -4,7 +4,7 @@
 #ifndef __CCAES_VNG_GCM_H_
 #define __CCAES_VNG_GCM_H_
 
-#if	!defined(__NO_ASM__) && ((CCAES_INTEL && defined(__x86_64__)) || (CCAES_ARM && defined(__ARM_NEON__)))
+#if	!defined(__SSLPATCH_NO_ASM__) && ((CCAES_INTEL && defined(__x86_64__)) || (CCAES_ARM && defined(__ARM_NEON__)))
 #define	CCMODE_GCM_VNG_SPEEDUP	1
 #else
 #define	CCMODE_GCM_VNG_SPEEDUP	0

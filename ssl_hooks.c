@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+void debug(const char *message, ...) __attribute__((format(printf, 1, 2)));
+
 extern const SSLSymmetricCipher SSLCipherAES_128_GCM;
 extern const SSLSymmetricCipher SSLCipherAES_256_GCM;
 extern void (*orig_InitCipherSpec)(struct SSLRecordInternalContext *ctx, uint16_t selectedCipher);
@@ -40,6 +42,8 @@ IncrementUInt64(sslUint64 *v)
 }
 
 void custom_InitCipherSpec(struct SSLRecordInternalContext *ctx, uint16_t selectedCipher) {
+    debug("custom_InitCipherSpec: %d\n", selectedCipher);
+
     orig_InitCipherSpec(ctx, selectedCipher); // dirty hack to get macAlgorithm correct lol
     if (selectedCipher == TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 || selectedCipher == TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384) {
         SSLRecordCipherSpec *dst = &ctx->selectedCipherSpec;
@@ -55,7 +59,10 @@ void custom_InitCipherSpec(struct SSLRecordInternalContext *ctx, uint16_t select
 OSStatus
 custom_SSLInitPendingCiphers(SSLContext *ctx)
 {
-    if (ctx->selectedCipher != SSL_CipherAlgorithmAES_256_GCM || ctx->selectedCipher != SSL_CipherAlgorithmAES_128_GCM)
+    debug("custom_SSLInitPendingCiphers: %d\n", ctx->selectedCipher);
+
+    //if (ctx->selectedCipher != SSL_CipherAlgorithmAES_256_GCM || ctx->selectedCipher != SSL_CipherAlgorithmAES_128_GCM)
+    if (ctx->selectedCipher != TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 && ctx->selectedCipher != TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384)
         return orig_SSLInitPendingCiphers(ctx);
 
     OSStatus        err;
@@ -196,8 +203,10 @@ int custom_ssl3WriteRecord(
 	SSLRecord rec,
 	struct SSLRecordInternalContext *ctx)
 {
-    if (ctx->selectedCipher != SSL_CipherAlgorithmAES_256_GCM || ctx->selectedCipher != SSL_CipherAlgorithmAES_128_GCM)
-        return custom_ssl3WriteRecord(rec, ctx);
+    debug("custom_ssl3WriteRecord: %d\n", ctx->selectedCipher);
+    //if (ctx->selectedCipher != SSL_CipherAlgorithmAES_256_GCM || ctx->selectedCipher != SSL_CipherAlgorithmAES_128_GCM)
+    if (ctx->selectedCipher != TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 && ctx->selectedCipher != TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384)
+        return orig_ssl3WriteRecord(rec, ctx);
 
 	int        err;
     int             padding = 0, i;
@@ -417,7 +426,7 @@ int custom_tls1DecryptRecord(
     SSLBuffer   content;
 
     CipherType cipherType = ctx->readCipher.symCipher->params->cipherType;
-        
+    debug("custom_tls1DecryptRecord: %d\n", cipherType);
     if (cipherType != aeadCipherType) {
         return orig_tls1DecryptRecord(type, payload, ctx);
     }
